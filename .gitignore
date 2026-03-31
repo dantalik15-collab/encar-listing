@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.env
+*.egg-info/
+.venv/
+
+# Node
+node_modules/
+.next/
+
+# Docker
+certbot/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Postgres data (in Docker volume, but just in case)
+pgdata/
