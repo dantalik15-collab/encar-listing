@@ -39,19 +39,10 @@
 ### Запуск
 
 ```bash
-# Клонировать репозиторий
-git clone https://github.com/<your-username>/encar-listing.git
+git clone https://github.com/dantalik15-collab/encar-listing.git
 cd encar-listing
-
-# Скопировать env-файл
 cp backend/.env.example backend/.env
-
-# Запустить все сервисы
 docker compose up --build -d
-
-# Проверить что всё работает
-curl http://localhost/api/health
-# {"status": "ok"}
 ```
 
 Приложение доступно:
@@ -61,13 +52,11 @@ curl http://localhost/api/health
 
 ### Первый запуск парсера
 
-После старта БД пустая. Запустите парсинг вручную:
+После старта БД пустая. Запустите парсинг:
 
 ```bash
 curl -X POST "http://localhost/api/v1/scraper/run?max_items=100"
 ```
-
-Или через Swagger UI: http://localhost/api/docs → POST `/api/v1/scraper/run`
 
 Далее парсинг запускается автоматически каждый день в 03:00 UTC.
 
@@ -100,71 +89,51 @@ curl -X POST "http://localhost/api/v1/scraper/run?max_items=100"
 ## Архитектура парсера
 
 ```
-ENCAR API (api.encar.com)
-    ↓ httpx async + retry (tenacity)
-    ↓ rate limiting (1.5s между запросами)
+ENCAR API (api.encar.com/search/car/list/general)
+    │  httpx async + retry (tenacity)
+    │  rate limiting (1.5s между запросами)
+    ▼
 Pydantic валидация (EncarRawItem)
-    ↓ маппинг полей + конвертация KRW → USD
+    │  маппинг полей (корейский → английский)
+    │  конвертация KRW → USD
+    ▼
 Upsert в PostgreSQL
     ├── Новые → INSERT
     └── Существующие → UPDATE (цена, пробег)
 ```
 
 **Ключевые особенности:**
+- Прямое обращение к внутреннему API ENCAR (без Selenium/Playwright)
 - Дедупликация по `encar_id` — повторный запуск не создаёт дубли
-- Retry с exponential backoff (2s → 4s → 8s → ..., до 3 попыток)
+- Retry с exponential backoff (2s → 4s → 8s, до 3 попыток)
+- Маппинг корейских названий марок в английские (현대 → Hyundai, 기아 → Kia)
 - Structured logging (JSON в проде, цветной вывод в debug)
-- Graceful error handling — ошибка одного объявления не останавливает весь парсинг
-- Валидация данных через Pydantic — "грязные" записи отбрасываются
+- Graceful error handling — ошибка одного объявления не останавливает парсинг
+- Валидация данных через Pydantic
 
 ---
 
 ## Деплой на VPS
 
 ### 1. DNS
+Добавить A-запись: `cars.lunarion.ru → IP VPS`
 
-Добавить A-запись: `cars.lunarion.ru → <IP вашего VPS>`
-
-### 2. Первый запуск
-
+### 2. Запуск
 ```bash
 ssh user@<vps-ip>
-git clone <repo> && cd encar-listing
+cd /opt
+git clone https://github.com/dantalik15-collab/encar-listing.git
+cd encar-listing
 cp backend/.env.example backend/.env
 docker compose up --build -d
+curl -X POST "http://localhost/api/v1/scraper/run?max_items=100"
 ```
 
 ### 3. SSL (Let's Encrypt)
-
 ```bash
-# Установить certbot
-sudo apt install certbot
-
-# Получить сертификат
-sudo certbot certonly --webroot \
-  -w ./certbot/www \
-  -d cars.lunarion.ru
-
-# Раскомментировать HTTPS-блок в nginx/nginx.conf
-# Перезапустить nginx
+apt install -y certbot
+certbot certonly --webroot -w ./certbot/www -d cars.lunarion.ru
 docker compose restart nginx
-```
-
----
-
-## Разработка
-
-```bash
-# Backend (без Docker)
-cd backend
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-uvicorn app.main:app --reload
-
-# Frontend (без Docker)
-cd frontend
-npm install
-npm run dev
 ```
 
 ---
@@ -178,8 +147,9 @@ encar-listing/
 │   │   ├── api/           # FastAPI роуты и схемы
 │   │   ├── core/          # Конфиг, логирование
 │   │   ├── db/            # Модели, сессия БД
-│   │   ├── scraper/       # Парсер ENCAR
+│   │   ├── scraper/       # Парсер ENCAR (клиент, схемы, сервис)
 │   │   └── services/      # Бизнес-логика
+│   ├── tests/             # Тесты парсера
 │   ├── alembic/           # Миграции БД
 │   ├── Dockerfile
 │   └── pyproject.toml
