@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     )
 
     # Парсер ENCAR
-    encar_base_url: str = "http://api.encar.com/search/car/list/premium"
+    encar_base_url: str = "https://api.encar.com/search/car/list/general"
     encar_detail_url: str = "http://www.encar.com/dc/dc_cardetailview.do"
     encar_photo_base_url: str = "https://ci.encar.com"
     scraper_page_size: int = 20
